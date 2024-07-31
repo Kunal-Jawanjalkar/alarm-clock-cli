@@ -4,9 +4,11 @@ import moment from "moment";
 import path from "node:path";
 import fs from "fs";
 import ValidCommands from "./valid-commands.js";
+import { playAudioFile } from "audic";
+import cron from "node-cron";
 
 const ALARMS_FILE = path.resolve("alarms.json");
-const ALARM_SOUND = path.resolve("alarm.wav");
+const ALARM_SOUND = path.resolve("alarm.mp3");
 
 // template class to create new alarms
 class Alarm {
@@ -115,6 +117,9 @@ class AlarmClock {
   }
 
   listAlarms() {
+    if (this.alarms.length === 0) {
+      return console.log(`No alarms to show`);
+    }
     console.log(`id weekday time`);
     this.alarms.forEach((alarm, index) => {
       let time = moment().hours(alarm.hour).minutes(alarm.minute);
@@ -125,21 +130,69 @@ class AlarmClock {
 
   async deleteAlarm() {
     const rl = readline.createInterface({ input, output });
-    const questionId = await rl.question(`Enter question id`);
-    this.alarms.filter((alm, index) => index !== questionId);
+    const alarmId = await this.promptValidated(
+      rl,
+      "Enter alarm id ",
+      (input) => Number.isInteger(Number(input)) && input >= 1
+    );
+    this.alarms = [...this.alarms].filter(
+      (alm, index) => index !== Number(alarmId - 1)
+    );
     this.syncAlarms(this.alarms);
+
+    console.log("Alarm deleted ");
+    rl.close();
   }
 
-  snoozeAlarm() {}
+  async snoozeAlarm(alarm) {
+    const rl = readline.createInterface({ input, output });
+    const snoozeMinutes = await this.promptValidated(
+      rl,
+      "Enter snooze time in minutes: ",
+      (input) => Number.isInteger(Number(input)) && input > 0
+    );
+    alarm.snoozeCount += 1;
+    const snoozeTime = moment()
+      .hours(alarm.hour)
+      .minutes(alarm.minute)
+      .add(snoozeMinutes, "minutes");
 
-  ringAlarmBell() {}
+    alarm.hour = snoozeTime.hours();
+    alarm.minute = snoozeTime.minutes();
+
+    this.syncAlarms(this.alarms);
+    rl.close();
+  }
+
+  async ringAlarmBell(alarm) {
+    console.log(
+      `Ringing alarm for ${alarm.weekday} at ${alarm.hour}:${alarm.minute}`
+    );
+
+    await playAudioFile(ALARM_SOUND);
+  }
 
   checkForAlarms() {
-    setInterval(() => {
+    console.log(`Checking for alarms...`);
+    cron.schedule("* * * * *", () => {
       const currentMinute = moment().get("minute");
       const currentHour = moment().get("hour");
       const currentWeekday = AlarmClock.validWeekDays[moment().get("day")];
-    }, 60 * 1000);
+
+      this.alarms.forEach((alarm) => {
+        if (
+          alarm.weekday === currentWeekday &&
+          alarm.hour === currentHour &&
+          alarm.minute === currentMinute
+        ) {
+          this.ringAlarmBell(alarm);
+          // alarm can be snoozed only three times
+          if (alarm.snoozeCount <= 3) {
+            this.snoozeAlarm(alarm);
+          }
+        }
+      });
+    });
   }
 }
 
@@ -166,9 +219,11 @@ function main() {
       break;
 
     default:
-      console.error("Invalid command use --help for all valid commands");
+      // console.error("Invalid command use --help for all valid commands");
       break;
   }
+
+  alarmClock.checkForAlarms();
 }
 
 main();
