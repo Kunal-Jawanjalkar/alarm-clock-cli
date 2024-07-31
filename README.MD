@@ -4,7 +4,7 @@
 
 node v20.10.0 is preffered
 
-OS - Windows 11
+Preferred OS - Windows 11
 
 ### Install the dependencies
 
@@ -22,6 +22,13 @@ npm run start
 
 ```
 node alarm-clock.js --help
+```
+
+### To run any command
+
+```
+node alarm-clock.js [command]
+
 ```
 
 ### Sample command to create an alarm
